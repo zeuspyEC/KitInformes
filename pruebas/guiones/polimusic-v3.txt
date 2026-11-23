@@ -1,0 +1,31 @@
+﻿# Prueba real de punta a punta: PoliMusic V3 (laboratorio 04 de Aplicaciones Web Avanzadas)
+# Requisitos: sitio en http://localhost:53403 (IIS Express) y SQL Server con BDD_PoliMusic.
+# Chrome se abre con un perfil aparte y con la accesibilidad activada para exponer el contenido de la página.
+abrir "C:\Program Files\Google\Chrome\Application\chrome.exe" --user-data-dir=C:\Users\Erick\Documents\KitInformes\pruebas\tmp\chrome-perfil --force-renderer-accessibility --no-first-run --no-default-browser-check --new-window http://localhost:53403/Login
+ventana Iniciar sesión - PoliMusic V3
+maximizar
+esperar 1500
+elementos
+capturar Se capturó la página de inicio de sesión de PoliMusic V3
+clic-nombre Usuario | campo
+tecla CTRL+A
+escribir Erick.Costa
+clic-nombre Contraseña | campo
+tecla CTRL+A
+escribir-oculto 12345678
+clic-nombre Entrar | botón
+verificar-titulo Inicio - PoliMusic V3
+# Chrome puede ofrecer guardar la contraseña: si aparece, se rechaza para que no tape la página
+clic-si-existe Nunca | botón
+clic-nombre Canciones | enlace
+verificar-titulo Canciones - PoliMusic V3
+elementos
+clic-nombre Reproducir Adventure | botón
+# Verificación por significado: al sonar, el botón cambia su nombre a «Pausar Adventure»
+verificar Pausar Adventure | botón
+esperar 1500
+capturar Se capturó la canción «Adventure» en reproducción
+clic-nombre Pausar Adventure | botón
+verificar Reproducir Adventure | botón
+clic-nombre Cerrar Sesión | enlace
+verificar-titulo Iniciar sesión - PoliMusic V3
