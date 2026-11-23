@@ -1,80 +1,123 @@
 # KitInformes
 
-Herramientas para documentar trabajos académicos: tomar capturas sin interrumpir el trabajo,
-registrar de qué es cada una y generar informes Word/PDF con un formato uniforme.
+Herramienta para documentar trabajos académicos: tomar capturas sin interrumpir el trabajo, **entender lo que
+se ve en pantalla** (sin IA), interactuar con las aplicaciones (clic por nombre, escribir, verificar) y dejar
+cada paso redactado para el informe.
 
-## Capturador (portable)
+## KitInformes.exe (portable)
 
-Un único `Capturador.exe` (sin instalación, requiere solo .NET Framework 4, incluido en Windows 10/11).
-Al abrirlo aparece un **botón flotante** con una cámara, siempre visible y que no quita el foco a la ventana
-en la que se está trabajando. Se puede arrastrar a cualquier lugar y recuerda su posición.
+Un único archivo `dist\KitInformes.exe` (~94 KB). No se instala ni necesita nada más: usa .NET Framework 4,
+que ya viene con Windows 10/11. Se puede copiar a cualquier carpeta o memoria USB; guarda su configuración
+(`config.ini`) y sus capturas (`Capturas\`) junto al ejecutable.
+
+Al abrirlo aparece un **botón flotante** con una cámara, siempre visible, que no quita el foco a la ventana
+en la que se trabaja. Se arrastra a cualquier lugar y recuerda su posición.
 
 | Acción | Botón / atajo |
 |---|---|
 | Capturar la pantalla completa | Clic en el botón · `Ctrl+Alt+S` |
 | Capturar solo la ventana activa | `Ctrl+Alt+V` |
-| Capturar una región (arrastrar con el mouse; `Esc` cancela) | `Ctrl+Alt+R` |
+| Capturar una región (arrastrar; `Esc` cancela) | `Ctrl+Alt+R` |
 | Mostrar u ocultar el botón (los atajos siguen funcionando) | `Ctrl+Alt+B` |
-| Más opciones (carpeta, registro, portapapeles, sonido, salir) | Clic derecho en el botón o en el ícono de la bandeja |
+| **Configuración** | Clic en el ícono de la bandeja · clic derecho en el botón → *Configuración…* |
 
-Cada captura se guarda en `Capturas/` (junto al .exe, configurable) como
-`001_2026-11-23_10-00-15_pantalla.png`, `002_…_ventana-chrome.png`, `003_…_region.png`, se copia al
-portapapeles y se registra en **`capturas.csv`**:
+### Configuración (dos opciones)
+
+1. **Botón flotante:** mostrarlo u ocultarlo.
+2. **Modo de uso:**
+   - **Solo capturar:** guarda la imagen y la anota en `capturas.csv`.
+   - **Capturar y analizar:** además describe lo que se ve —ventana, programa, textos visibles, botones,
+     campos y enlaces— en `NNN_…_analisis.md` junto a la imagen y muestra un resumen como respuesta, p. ej.:
+     *«Se observa la ventana «Canciones - PoliMusic V3» (chrome). Contiene 12 botones, 2 campos, 9 enlaces.
+     Textos principales: «Catálogo», «Canciones», …»*.
+
+### Pantalla limpia
+
+Antes de cada captura (y de cada acción de un guion) se cierran solas las ventanas emergentes que estorban,
+como **«¿Guardar la contraseña?»**, pulsando **«Nunca»**, **«No, gracias»**, **«Ahora no»**… Se hace con la
+acción propia del botón (accesibilidad de Windows), sin mover el mouse. La lista está en `config.ini`
+(`descartar=`).
+
+### Cursor en tiempo real
+
+Cuando el programa actúa, el cursor **se desliza** hasta el destino y cada clic se marca con un **anillo rojo**
+(que deja pasar el clic y se quita antes de la captura de verificación). Se desactiva con `cursor_visible=0`.
+
+### Comandos de terminal
 
 ```
-numero;fecha;hora;modo;archivo;ancho;alto;proceso;titulo_ventana
-003;2026-11-23;10:00:24;ventana;003_2026-11-23_10-00-24_ventana-notepad.png;626;413;"notepad";"Sin título: Bloc de notas"
+KitInformes --capturar pantalla|ventana            una captura y termina
+KitInformes analizar [--ventana "título"]          captura + contexto de lo que se ve
+KitInformes limpiar [--ventana "título"]           cierra ventanas emergentes
+KitInformes elementos [--ventana "título"]         botones, enlaces y campos con nombre y posición
+KitInformes clic-nombre "Entrar" [--tipo botón] [--ventana "título"]   busca, hace clic y verifica
+KitInformes --sondear X Y | --clic X Y             ¿reacciona al hover? / clic verificado (antes/después)
+KitInformes explorar X Y ANCHO ALTO [--paso 24]    zonas interactivas por hover (solo visual)
+KitInformes guion pasos.txt                        ejecuta un guion y deja registro.md
+KitInformes --configuracion | --salir
 ```
 
-Así, al redactar el informe se sabe de qué programa y ventana es cada imagen.
+El **clic verificado** compara capturas antes/después: cuenta como efectivo solo si cambió el lugar donde se
+hizo clic o casi toda la pantalla (una ventana emergente en otra zona no cuenta). Guarda `-antes`, `-despues`
+y `-marcado.png` y una fila en `acciones.csv`.
 
-**Línea de comandos:**
+### Guiones
+
+Un guion es un archivo de texto con un paso por línea:
 
 ```
-Capturador.exe --capturar pantalla     # una captura y termina
-Capturador.exe --capturar ventana
-Capturador.exe --salir                 # cierra la instancia abierta
-Capturador.exe --probar-atajos         # código de salida = atajos ocupados por otras aplicaciones
-Capturador.exe --sondear X Y           # pasa el cursor por (X,Y): ¿cambia algo? => elemento interactivo
-Capturador.exe --clic X Y [--esperar ms]  # clic en (X,Y) y verifica que la pantalla cambió
+abrir "C:\Program Files\Google\Chrome\Application\chrome.exe" --force-renderer-accessibility http://localhost:53403/Login
+ventana Iniciar sesión - PoliMusic V3
+clic-nombre Usuario | campo
+tecla CTRL+A
+escribir Erick.Costa
+clic-nombre Contraseña | campo
+escribir-oculto ********
+clic-nombre Entrar | botón
+verificar-titulo Inicio - PoliMusic V3
+clic-nombre Canciones | enlace
+clic-nombre Reproducir Adventure | botón
+verificar Pausar Adventure | botón
+capturar Se capturó la canción en reproducción
 ```
 
-`--sondear` y `--clic` siguen el ciclo **actuar y verificar**: captura «antes» con el cursor en reposo,
-actúa, captura «después» y compara los píxeles (cerca del punto, 200×200, y en toda la pantalla, para no
-confundir animaciones lejanas como relojes). Guardan `-antes.png`, `-despues.png` y `-marcado.png`
-(punto de acción en rojo y zona que cambió en azul) y una fila en `acciones.csv`.
-Código de salida: `0` hubo cambio, `1` no cambió nada, `3` argumentos inválidos.
+Instrucciones: `abrir`, `ventana`, `maximizar`, `esperar`, `capturar`, `analizar`, `limpiar`, `elementos`,
+`clic-nombre`, `clic-si-existe`, `clic`, `escribir`, `escribir-oculto`, `tecla` (`ENTER`, `CTRL+A`…),
+`verificar`, `verificar-titulo`, `cerrar`. Cada paso se verifica y queda en `registro.md` **en voz impersonal**
+(«Se hizo clic en el botón «Entrar» y la pantalla cambió»), listo para el informe. Ejemplo real:
+[`pruebas/guiones/polimusic-v3.txt`](pruebas/guiones/polimusic-v3.txt) (25 pasos sobre el laboratorio 04).
 
-**Extensión:** en `config.ini`, `despues=` define un comando que se ejecuta tras cada captura
-(`{archivo}` se reemplaza por la ruta del PNG). Es el punto donde se conectará el análisis automático de
-imágenes con IA.
+> Chrome/Edge/Brave exponen el contenido de la página a la accesibilidad de Windows si se abren con
+> `--force-renderer-accessibility` (o cuando hay un lector de pantalla activo).
 
-### Compilar y probar
+### Alcance sin IA
+
+- **Hace:** encontrar botones, campos y enlaces **que tienen nombre**; leer textos visibles; hacer clic,
+  escribir y verificar que la pantalla cambió; cerrar ventanas emergentes; recorrer flujos completos con un
+  guion y documentarlos.
+- **No hace:** entender el significado de una imagen sin nombres (gráficos, juegos, imágenes) ni decidir por sí
+  solo qué hacer después: eso lo define quien escribe el guion (o, a futuro, un módulo de IA conectado con
+  `despues=` en `config.ini`).
+
+## Compilar y probar
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File capturador\compilar.ps1   # -> dist\Capturador.exe
-powershell -ExecutionPolicy Bypass -File pruebas\probar.ps1        # 14 pruebas de punta a punta
+powershell -ExecutionPolicy Bypass -File construir.ps1                 # -> dist\KitInformes.exe
+powershell -ExecutionPolicy Bypass -File pruebas\ejecutar-pruebas.ps1  # 21 pruebas de punta a punta
 ```
 
-Las pruebas usan una copia aislada en `%TEMP%` y toman el control del teclado y el mouse unos segundos
-(atajos, clic en el botón, selección de región, ventana del Bloc de notas): no usar el equipo mientras corren.
+Las pruebas usan una copia aislada en `pruebas\tmp` y **solo ventanas de prueba propias** (nunca programas del
+usuario). Toman el control del teclado y el mouse alrededor de un minuto: no usar el equipo mientras corren.
+
+**Antivirus:** un programa que captura la pantalla, lee otras ventanas y mueve el mouse se parece, por su
+comportamiento, a software de control remoto, y algunos antivirus (p. ej., Bitdefender) lo bloquean por
+heurística. Se resuelve agregando la carpeta del proyecto a las excepciones del antivirus.
 
 ## Generador de informes
 
 `herramientas/informes/`: generador en Node.js (`docx`) con portada, índice, figuras y tablas numeradas,
 bloques de código y la sección de uso de IA; `apdf.ps1` actualiza el índice y exporta a PDF con Word;
-`vista.cjs` convierte el PDF a imágenes para revisarlo; `diagramas.cjs` dibuja diagramas en SVG y los
-exporta a PNG. Ver `ejemplo.cjs`.
-
-```
-cd herramientas\informes
-npm install
-node ejemplo.cjs
-powershell -File apdf.ps1 -docx "%CD%\salida\ejemplo.docx"
-```
-
-`herramientas/*.ps1`: capturas de una ventana (aunque esté detrás), de la pantalla, unión de imágenes,
-hojas de contacto y envío seguro de teclas/clics (solo si la ventana está en primer plano).
+`vista.cjs` convierte el PDF a imágenes; `diagramas.cjs` dibuja diagramas SVG → PNG. Ver `ejemplo.cjs`.
 
 ## Guía
 

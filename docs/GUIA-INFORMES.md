@@ -73,10 +73,14 @@ Marco correcto (el usuario lo exige así):
 
 - **Prioridad:** usar las capturas que el usuario deja en su carpeta (p. ej. `CAPTURAS/NN.png`); las que falten,
   tomarlas uno mismo. Revisar **cada** imagen antes de usarla (abrirla y mirarla).
-- **Capturador** (este repo, `dist/Capturador.exe`): botón flotante + atajos
+- **KitInformes** (este repo, `dist/KitInformes.exe`, portable): botón flotante + atajos
   `Ctrl+Alt+S` pantalla, `Ctrl+Alt+V` ventana activa, `Ctrl+Alt+R` región, `Ctrl+Alt+B` mostrar/ocultar.
-  Guarda `NNN_fecha_hora_modo.png` y registra todo en `capturas.csv` (fecha, modo, proceso, título de la ventana),
-  lo que permite saber después de qué es cada captura. También: `Capturador.exe --capturar pantalla|ventana`.
+  Guarda `NNN_fecha_hora_modo.png` y registra todo en `capturas.csv` (fecha, modo, proceso, título de la ventana).
+  En modo **«Capturar y analizar»** (Configuración) deja además `NNN_…_analisis.md` con lo que se ve (ventana,
+  textos, botones, campos) y un resumen; sirve para redactar el texto que va antes de cada figura.
+  Antes de capturar cierra solo las ventanas emergentes («Guardar contraseña» → «Nunca», «No, gracias»).
+  Los **guiones** (`KitInformes guion pasos.txt`) recorren un procedimiento y dejan `registro.md` con cada paso
+  ya redactado en voz impersonal y su captura: base directa para la sección de desarrollo de un informe.
 - **Herramientas PowerShell** (`herramientas/`):
   - `ventana.ps1` captura una ventana con PrintWindow aunque esté detrás (recorta el borde invisible de Win10).
   - `pantalla.ps1` captura toda la pantalla.
@@ -140,10 +144,19 @@ Marco correcto (el usuario lo exige así):
 
 ## 8. Ideas en curso (KitInformes)
 
-- Objetivo a futuro: que el Capturador **analice cada imagen** al capturarla (qué se ve, qué ventana, qué
-  botones) para ayudar a **redactar** el informe automáticamente. Punto de extensión ya listo: en `config.ini`,
-  `despues=comando {archivo}` se ejecuta tras cada captura.
-- Ciclo **actuar y verificar** ya implementado: `Capturador.exe --sondear X Y` (hover: confirma que hay un
+- Hecho (v1.2.0, sin IA): análisis de lo que se ve por accesibilidad de Windows (UI Automation), clic por
+  nombre, guiones, limpieza de ventanas emergentes, configuración con dos opciones y cursor visible en tiempo
+  real. Prueba real: guion de 25 pasos sobre PoliMusic V3 (login, navegación, reproducción) verificado también
+  en SQL Server (el contador de reproducciones subió).
+- Lecciones: el clic solo cuenta si cambia el lugar del clic o casi toda la pantalla (una burbuja del navegador
+  en otra zona daba falsos positivos); el «antes» del clic se toma con el cursor ya encima (si no, el hover se
+  confunde con el clic); verificar por significado (el botón pasa a «Pausar …») y, si se puede, fuera de la
+  pantalla (la base de datos); Chrome necesita `--force-renderer-accessibility` y un perfil limpio para pruebas;
+  `Start-Process` de PowerShell 5 no entrecomilla argumentos con espacios y `-Wait` espera también a los
+  procesos hijos; los scripts .ps1 con tildes deben guardarse con BOM.
+- Antivirus: Bitdefender bloqueó por comportamiento el ejecutable y algunos scripts (los pone en cuarentena y
+  bloquea esas rutas). Solución correcta: excepción de la carpeta del proyecto; nunca disfrazar el programa.
+- Ciclo **actuar y verificar**: `KitInformes.exe --sondear X Y` (hover: confirma que hay un
   elemento interactivo) y `--clic X Y` (confirma que la pantalla cambió). Comparan píxeles cerca del punto y en
   toda la pantalla, y dejan antes/después/marcado + `acciones.csv`. Lecciones: el cursor en reposo va en la
   esquina superior izquierda (la inferior derecha es «Mostrar escritorio»); los efectos de hover pueden ser de
