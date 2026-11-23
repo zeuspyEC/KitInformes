@@ -22,6 +22,20 @@ namespace KitInformes
         [DllImport("user32.dll")] static extern void keybd_event(byte k, byte s, int f, int e);
 
         /// <summary>Primera ventana visible cuyo título contiene el texto (sin distinguir mayúsculas).</summary>
+        /// <summary>Ventanas visibles de primer nivel de un proceso (la principal y sus ventanas emergentes).</summary>
+        public static List<IntPtr> DelProceso(uint pid)
+        {
+            var lista = new List<IntPtr>();
+            EnumWindows((h, l) =>
+            {
+                uint p;
+                Nativo.GetWindowThreadProcessId(h, out p);
+                if (p == pid && Nativo.IsWindowVisible(h)) lista.Add(h);
+                return true;
+            }, IntPtr.Zero);
+            return lista;
+        }
+
         public static IntPtr Buscar(string texto)
         {
             IntPtr hallada = IntPtr.Zero;
@@ -54,12 +68,13 @@ namespace KitInformes
     {
         class Paso { public int N; public string Instruccion, Descripcion, Imagen = ""; public bool Ok; }
 
-        readonly string carpeta;
+        readonly string carpeta, descartar;
         readonly List<Paso> pasos = new List<Paso>();
         IntPtr ventana;
 
-        public Guion(string carpetaBase)
+        public Guion(string carpetaBase, string descartar)
         {
+            this.descartar = descartar;
             carpeta = Path.Combine(carpetaBase, "guion_" + DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss"));
             Directory.CreateDirectory(carpeta);
         }
@@ -135,14 +150,21 @@ namespace KitInformes
                 string cmd = (sp < 0 ? linea : linea.Substring(0, sp)).ToLowerInvariant();
                 string resto = sp < 0 ? "" : linea.Substring(sp + 1).Trim();
                 var p = new Paso { N = pasos.Count + 1, Instruccion = cmd == "escribir-oculto" ? "escribir-oculto ••••" : linea };
+                // Antes de cada acción sobre la ventana se cierran ventanas emergentes («Nunca», «No, gracias»…)
+                // para que no tapen el clic ni salgan en las capturas
+                List<string> cerrados = AccionesQueLimpian.Contains(cmd) ? Limpieza.Descartar(ventana, descartar) : new List<string>();
                 try { EjecutarPaso(cmd, resto, p); }
                 catch (Exception ex) { p.Ok = false; p.Descripcion = (p.Descripcion ?? "Error en «" + linea + "»") + " (" + ex.Message + ")"; }
+                if (cerrados.Count > 0) p.Descripcion = "Se cerró una ventana emergente con «" + string.Join("», «", cerrados.ToArray()) + "». " + p.Descripcion;
                 pasos.Add(p);
                 if (!p.Ok) { fallo = p.N; break; }
             }
             EscribirRegistro(archivo, fallo);
             return fallo;
         }
+
+        static readonly HashSet<string> AccionesQueLimpian = new HashSet<string> {
+            "clic-nombre", "clic", "escribir", "escribir-oculto", "tecla", "elementos", "analizar", "verificar" };
 
         void EjecutarPaso(string cmd, string resto, Paso p)
         {
@@ -174,10 +196,32 @@ namespace KitInformes
                 case "esperar":
                     Thread.Sleep(int.Parse(resto)); p.Ok = true; p.Descripcion = "Se esperó " + resto + " ms."; break;
                 case "capturar":
+                {
+                    // Pantalla limpia: antes de la foto se cierran ventanas emergentes («Nunca», «No, gracias»…)
+                    var cerrados = Limpieza.Descartar(ventana, descartar);
                     Ventanas.Traer(ventana); Thread.Sleep(200);
                     p.Imagen = CapturarVentana("captura"); p.Ok = p.Imagen.Length > 0;
-                    p.Descripcion = (resto.Length > 0 ? resto : "Se capturó la ventana") + ".";
+                    p.Descripcion = (resto.Length > 0 ? resto : "Se capturó la ventana") + "." +
+                        (cerrados.Count > 0 ? " Antes se cerró una ventana emergente con «" + string.Join("», «", cerrados.ToArray()) + "»." : "");
                     break;
+                }
+                case "limpiar":
+                {
+                    var cerrados = Limpieza.Descartar(ventana, descartar);
+                    p.Ok = true;
+                    p.Descripcion = cerrados.Count > 0 ? "Se cerraron ventanas emergentes con «" + string.Join("», «", cerrados.ToArray()) + "»."
+                                                       : "No había ventanas emergentes que cerrar.";
+                    break;
+                }
+                case "analizar":
+                {
+                    Ventanas.Traer(ventana); Thread.Sleep(200);
+                    p.Imagen = CapturarVentana("analisis");
+                    var r = Analizador.Analizar(ventana, Path.Combine(carpeta, p.Imagen));
+                    p.Ok = p.Imagen.Length > 0;
+                    p.Descripcion = r.Resumen;
+                    break;
+                }
                 case "elementos":
                 {
                     Ventanas.Traer(ventana);

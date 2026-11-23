@@ -142,7 +142,6 @@ namespace KitInformes
         }
 
         // ---------- Exploración visual (sin accesibilidad ni IA) ----------
-        [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
 
         /// <summary>
         /// Recorre una cuadrícula dentro de «area» pasando el cursor por cada punto y compara un recuadro alrededor
@@ -152,7 +151,7 @@ namespace KitInformes
         {
             Rectangle vs = SystemInformation.VirtualScreen;
             area = Rectangle.Intersect(area, vs);
-            SetCursorPos(vs.Left + 1, vs.Top + 1);
+            Accion.MoverCursor(vs.Left + 1, vs.Top + 1);
             Thread.Sleep(400);
             var activos = new List<Point>();
             using (Bitmap reposo = Captura.Area(area))
@@ -160,7 +159,7 @@ namespace KitInformes
                 for (int y = area.Top + paso / 2; y < area.Bottom; y += paso)
                     for (int x = area.Left + paso / 2; x < area.Right; x += paso)
                     {
-                        SetCursorPos(x, y);
+                        Accion.MoverCursor(x, y);
                         Thread.Sleep(140);
                         using (Bitmap ahora = Captura.Area(area))
                         {
@@ -170,7 +169,7 @@ namespace KitInformes
                             if (pct * (paso * 2) * (paso * 2) / 100.0 >= 4) activos.Add(new Point(x, y));
                         }
                     }
-                SetCursorPos(vs.Left + 1, vs.Top + 1);
+                Accion.MoverCursor(vs.Left + 1, vs.Top + 1);
 
                 // Unir puntos vecinos (distancia de un paso) en cajas
                 var cajas = new List<Rectangle>();

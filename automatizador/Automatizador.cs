@@ -1,45 +1,51 @@
-// Automatizador — KitInformes
-// Programa de consola, separado del Capturador, para leer la pantalla sin IA (accesibilidad de Windows),
-// explorar por hover, hacer clic por nombre y ejecutar guiones. Se ejecuta solo cuando se le pide.
+// Comandos de KitInformes.exe para la terminal: leer lo que se ve (sin IA), analizar, limpiar ventanas
+// emergentes, explorar por hover, clic por nombre y guiones. El mismo .exe es el capturador residente.
 using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
-using System.Windows.Forms;
-
-[assembly: System.Reflection.AssemblyTitle("Automatizador - KitInformes")]
-[assembly: System.Reflection.AssemblyDescription("Lectura de elementos de pantalla, clic verificado y guiones para documentar procedimientos")]
-[assembly: System.Reflection.AssemblyProduct("KitInformes")]
-[assembly: System.Reflection.AssemblyCompany("Erick Costa")]
-[assembly: System.Reflection.AssemblyVersion("1.2.0.0")]
-[assembly: System.Reflection.AssemblyFileVersion("1.2.0.0")]
 
 namespace KitInformes
 {
-    static class Automatizador
+    static class Comandos
     {
+        public static readonly string[] Nombres = { "elementos", "analizar", "limpiar", "clic-nombre", "explorar", "guion", "ayuda" };
+
         const string AYUDA =
-@"Automatizador (KitInformes) — uso:
-  Automatizador elementos [--ventana ""título""]          lista botones, enlaces y campos (captura numerada + CSV)
-  Automatizador clic-nombre ""texto"" [--tipo botón] [--ventana ""título""]   busca, hace clic y verifica
-  Automatizador sondear X Y                              ¿reacciona al pasar el cursor?
-  Automatizador clic X Y [--esperar ms]                  clic con verificación antes/después
-  Automatizador explorar X Y ANCHO ALTO [--paso 24]      zonas interactivas por hover (solo visual)
-  Automatizador guion pasos.txt                          ejecuta un guion y deja registro.md
-Códigos de salida: 0 correcto · 1 sin cambio / nada encontrado · 3 argumentos inválidos · 4 elemento no encontrado
+@"KitInformes — comandos:
+  KitInformes                                         abre el capturador (botón flotante, atajos, configuración)
+  KitInformes --capturar pantalla|ventana             una captura y termina
+  KitInformes analizar [--ventana ""título""]           captura + contexto de lo que se ve (_analisis.md)
+  KitInformes limpiar [--ventana ""título""]            cierra ventanas emergentes («Nunca», «No, gracias»…)
+  KitInformes elementos [--ventana ""título""]          botones, enlaces y campos (captura numerada + CSV)
+  KitInformes clic-nombre ""texto"" [--tipo botón] [--ventana ""título""]   busca, hace clic y verifica
+  KitInformes --sondear X Y | --clic X Y [--esperar ms]   ¿reacciona al hover? / clic verificado
+  KitInformes explorar X Y ANCHO ALTO [--paso 24]     zonas interactivas por hover (solo visual)
+  KitInformes guion pasos.txt                         ejecuta un guion y deja registro.md
+  KitInformes --salir                                 cierra el capturador abierto
+Códigos de salida: 0 correcto · 1 sin cambio / nada encontrado · 3 argumentos inválidos · 4 no encontrado
 (en guion: número del paso que falló).";
 
-        [STAThread]
-        static int Main(string[] args)
-        {
-            Nativo.SetProcessDPIAware();
-            Console.OutputEncoding = Encoding.UTF8;
-            var lista = new List<string>(args);
-            if (lista.Count == 0 || lista[0] == "-h" || lista[0] == "--ayuda") { Console.WriteLine(AYUDA); return lista.Count == 0 ? 3 : 0; }
+        [DllImport("kernel32.dll")] static extern bool AttachConsole(int pid);
 
-            string dirBase = Path.GetDirectoryName(Application.ExecutablePath);
-            string carpeta = Config.Cargar(dirBase).Carpeta;
+        /// <summary>El .exe es de ventanas: para escribir en la terminal desde la que se llamó, se adjunta a su consola.</summary>
+        static void UsarConsola()
+        {
+            if (AttachConsole(-1))
+            {
+                var o = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true };
+                Console.SetOut(o);
+                Console.WriteLine();
+            }
+        }
+
+        public static int Ejecutar(List<string> lista, string dirBase)
+        {
+            UsarConsola();
+            var cfg = Config.Cargar(dirBase);
+            string carpeta = cfg.Carpeta;
             Func<string, string> valor = (op) => { int k = lista.IndexOf(op); return k >= 0 && k + 1 < lista.Count ? lista[k + 1] : null; };
             Func<int, int?> entero = (k) => { int n; return k < lista.Count && int.TryParse(lista[k], out n) ? (int?)n : null; };
             Func<IntPtr> objetivo = () =>
@@ -64,6 +70,32 @@ Códigos de salida: 0 correcto · 1 sin cambio / nada encontrado · 3 argumentos
                     Console.WriteLine(els.Count + " elementos · " + png);
                     return els.Count > 0 ? 0 : 1;
                 }
+                case "analizar":
+                {
+                    IntPtr h = objetivo();
+                    if (h == IntPtr.Zero) { Console.WriteLine("No se encontró la ventana."); return 4; }
+                    if (cfg.Limpiar) foreach (string b in Limpieza.Descartar(h, cfg.Descartar)) Console.WriteLine("Se cerró una ventana emergente con «" + b + "».");
+                    var info = InfoVentana.De(h);
+                    string ruta;
+                    using (Bitmap bmp = Captura.Ventana(h))
+                    {
+                        if (bmp == null) { Console.WriteLine("La ventana está minimizada."); return 1; }
+                        ruta = new Registro(carpeta).Guardar(bmp, "ventana", info);
+                    }
+                    var r = Analizador.Analizar(h, ruta);
+                    Console.WriteLine(r.Resumen);
+                    Console.WriteLine("Imagen: " + ruta);
+                    Console.WriteLine("Análisis: " + r.Archivo);
+                    return 0;
+                }
+                case "limpiar":
+                {
+                    IntPtr h = objetivo();
+                    var pulsados = Limpieza.Descartar(h, cfg.Descartar);
+                    foreach (string b in pulsados) Console.WriteLine("Se cerró una ventana emergente con «" + b + "».");
+                    if (pulsados.Count == 0) Console.WriteLine("No había ventanas emergentes que cerrar.");
+                    return pulsados.Count > 0 ? 0 : 1;
+                }
                 case "clic-nombre":
                 {
                     if (lista.Count < 2) return 3;
@@ -73,18 +105,6 @@ Códigos de salida: 0 correcto · 1 sin cambio / nada encontrado · 3 argumentos
                     var r = Accion.Ejecutar("clic", el.Centro.X, el.Centro.Y, 1500, carpeta);
                     Console.WriteLine("Clic en el " + el.Tipo + " «" + el.Nombre + "» (" + el.Centro.X + ", " + el.Centro.Y + "): " +
                         (r.Cambio ? "la pantalla cambió" : "sin cambio") + " · " + r.Marcado);
-                    return r.Cambio ? 0 : 1;
-                }
-                case "sondear":
-                case "clic":
-                {
-                    int? x = entero(1), y = entero(2);
-                    if (x == null || y == null) return 3;
-                    int espera = lista[0].Contains("clic") ? 1200 : 600;
-                    if (valor("--esperar") != null) int.TryParse(valor("--esperar"), out espera);
-                    var r = Accion.Ejecutar(lista[0].TrimStart('-').ToLowerInvariant(), x.Value, y.Value, espera, carpeta);
-                    Console.WriteLine((r.Cambio ? "Cambió" : "Sin cambio") + " · local " + r.Porcentaje.ToString("0.###") + " % · global " +
-                        r.Global.ToString("0.###") + " % · zona " + r.Zona + " · " + r.Marcado);
                     return r.Cambio ? 0 : 1;
                 }
                 case "explorar":
@@ -110,7 +130,7 @@ Códigos de salida: 0 correcto · 1 sin cambio / nada encontrado · 3 argumentos
                 case "guion":
                 {
                     if (lista.Count < 2 || !File.Exists(lista[1])) { Console.WriteLine("No existe el guion."); return 3; }
-                    var g = new Guion(carpeta);
+                    var g = new Guion(carpeta, cfg.Descartar);
                     int fallo = g.Ejecutar(Path.GetFullPath(lista[1]));
                     Console.WriteLine(File.ReadAllText(Path.Combine(g.Carpeta, "registro.md"), Encoding.UTF8));
                     Console.WriteLine("Carpeta: " + g.Carpeta);
@@ -118,7 +138,7 @@ Códigos de salida: 0 correcto · 1 sin cambio / nada encontrado · 3 argumentos
                 }
             }
             Console.WriteLine(AYUDA);
-            return 3;
+            return lista[0] == "ayuda" ? 0 : 3;
         }
     }
 }
