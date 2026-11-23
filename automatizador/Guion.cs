@@ -74,6 +74,21 @@ namespace KitInformes
             return sb.ToString();
         }
 
+        /// <summary>«ENTER» → {ENTER}; «CTRL+A» → ^a; «CTRL+SHIFT+T» → ^+t; «ALT+F4» → %{F4}.</summary>
+        static string Combinacion(string teclas)
+        {
+            var sb = new StringBuilder();
+            string[] partes = teclas.ToUpperInvariant().Split('+');
+            for (int i = 0; i < partes.Length - 1; i++)
+            {
+                string m = partes[i].Trim();
+                sb.Append(m == "CTRL" || m == "CONTROL" ? "^" : m == "ALT" ? "%" : m == "SHIFT" || m == "MAYUS" ? "+" : "");
+            }
+            string k = partes[partes.Length - 1].Trim();
+            sb.Append(k.Length == 1 ? k.ToLowerInvariant() : "{" + k + "}");
+            return sb.ToString();
+        }
+
         string CapturarVentana(string sufijo)
         {
             if (ventana == IntPtr.Zero) return "";
@@ -170,7 +185,7 @@ namespace KitInformes
                     string csv;
                     p.Imagen = Path.GetFileName(Elementos.Documentar(ventana, lista, carpeta, out csv));
                     p.Ok = lista.Count > 0;
-                    p.Descripcion = "Se identificaron " + lista.Count + " elementos interactivos en la ventana (" + Path.GetFileName(csv) + ").";
+                    p.Descripcion = (lista.Count == 1 ? "Se identificó 1 elemento interactivo" : "Se identificaron " + lista.Count + " elementos interactivos") + " en la ventana (" + Path.GetFileName(csv) + ").";
                     break;
                 }
                 case "clic-nombre":
@@ -185,6 +200,21 @@ namespace KitInformes
                     p.Ok = r.Cambio;
                     p.Descripcion = "Se hizo clic en el " + e.Tipo + " «" + e.Nombre + "»" +
                         (r.Cambio ? " y la pantalla cambió (" + r.Global.ToString("0.#") + " %)." : ", pero la pantalla no cambió.");
+                    break;
+                }
+                case "clic-si-existe":
+                {
+                    // Para diálogos que pueden aparecer o no (p. ej., «¿Guardar la contraseña?» del navegador)
+                    Separar(resto, out nombre, out tipo);
+                    Ventanas.Traer(ventana);
+                    Elemento e;
+                    EsperarElemento(nombre, tipo, 3, out e);
+                    p.Ok = true;
+                    if (e == null) { p.Descripcion = "No apareció «" + nombre + "», por lo que no fue necesario cerrarlo."; break; }
+                    var r = Accion.Ejecutar("clic", e.Centro.X, e.Centro.Y, 1000, carpeta);
+                    p.Imagen = Path.GetFileName(r.Marcado);
+                    p.Ok = r.Cambio;
+                    p.Descripcion = "Apareció el " + e.Tipo + " «" + e.Nombre + "» y se hizo clic en él" + (r.Cambio ? "." : ", pero la pantalla no cambió.");
                     break;
                 }
                 case "clic":
@@ -205,8 +235,9 @@ namespace KitInformes
                     break;
                 case "tecla":
                     if (!Ventanas.Traer(ventana)) { p.Ok = false; p.Descripcion = "La ventana no quedó en primer plano."; break; }
-                    SendKeys.SendWait("{" + resto.ToUpperInvariant() + "}"); Thread.Sleep(800);
-                    p.Ok = true; p.Descripcion = "Se presionó la tecla " + resto.ToUpperInvariant() + ".";
+                    SendKeys.SendWait(Combinacion(resto)); Thread.Sleep(800);
+                    p.Ok = true;
+                    p.Descripcion = resto.Contains("+") ? "Se presionó la combinación " + resto.ToUpperInvariant() + "." : "Se presionó la tecla " + resto.ToUpperInvariant() + ".";
                     break;
                 case "verificar":
                 {
