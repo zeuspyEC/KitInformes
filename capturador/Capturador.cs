@@ -953,6 +953,61 @@ namespace KitInformes
                 return ocupados;
             }
 
+            // ---------- Lectura de pantalla y automatización sin IA ----------
+            string carpetaCfg = Config.Cargar(dirBase).Carpeta;
+            Func<string, string> valor = (op) => { int k = lista.IndexOf(op); return k >= 0 && k + 1 < lista.Count ? lista[k + 1] : null; };
+            Func<IntPtr> objetivo = () =>
+            {
+                string t = valor("--ventana");
+                IntPtr h = t != null ? Ventanas.Buscar(t) : Nativo.GetForegroundWindow();
+                if (t != null) Ventanas.Traer(h);
+                return h;
+            };
+
+            // Capturador.exe --elementos [--ventana "título"]  -> captura numerada + CSV con botones, enlaces y campos
+            if (lista.Contains("--elementos"))
+            {
+                IntPtr h = objetivo();
+                var els = Elementos.Listar(h);
+                string csv;
+                Elementos.Documentar(h, els, carpetaCfg, out csv);
+                return els.Count > 0 ? 0 : 1;
+            }
+
+            // Capturador.exe --clic-nombre "texto" [--tipo botón] [--ventana "título"]  -> busca por nombre, hace clic y verifica
+            if (valor("--clic-nombre") != null)
+            {
+                IntPtr h = objetivo();
+                var el = Elementos.Buscar(Elementos.Listar(h), valor("--clic-nombre"), valor("--tipo") ?? "");
+                if (el == null) return 4;
+                return Accion.Ejecutar("clic", el.Centro.X, el.Centro.Y, 1500, carpetaCfg).Cambio ? 0 : 1;
+            }
+
+            // Capturador.exe --explorar X Y ANCHO ALTO [--paso 24]  -> zonas interactivas por hover (puramente visual)
+            i = lista.IndexOf("--explorar");
+            if (i >= 0)
+            {
+                int ex, ey, ew, eh, paso = 24;
+                if (i + 4 >= lista.Count || !int.TryParse(lista[i + 1], out ex) || !int.TryParse(lista[i + 2], out ey) ||
+                    !int.TryParse(lista[i + 3], out ew) || !int.TryParse(lista[i + 4], out eh)) return 3;
+                if (valor("--paso") != null) int.TryParse(valor("--paso"), out paso);
+                string marcado;
+                var cajas = Elementos.Explorar(new Rectangle(ex, ey, ew, eh), Math.Max(6, paso), carpetaCfg, out marcado);
+                var sb = new StringBuilder("zona;x;y;ancho;alto;centro_x;centro_y\r\n");
+                for (int k = 0; k < cajas.Count; k++)
+                    sb.AppendLine(string.Join(";", new[] { (k + 1).ToString(), cajas[k].X.ToString(), cajas[k].Y.ToString(), cajas[k].Width.ToString(),
+                        cajas[k].Height.ToString(), (cajas[k].X + cajas[k].Width / 2).ToString(), (cajas[k].Y + cajas[k].Height / 2).ToString() }));
+                File.WriteAllText(Path.ChangeExtension(marcado, ".csv"), sb.ToString(), new UTF8Encoding(true));
+                return cajas.Count > 0 ? 0 : 1;
+            }
+
+            // Capturador.exe --guion pasos.txt  -> ejecuta el guion; deja registro.md, pasos.csv e imágenes
+            if (valor("--guion") != null)
+            {
+                var g = new Guion(carpetaCfg);
+                return g.Ejecutar(Path.GetFullPath(valor("--guion")));
+            }
+
             // Actuar y verificar: Capturador.exe --sondear X Y | --clic X Y  [--esperar ms]
             // Código de salida: 0 = hubo cambio en pantalla, 1 = no cambió nada, 3 = argumentos inválidos
             foreach (string modoAccion in new[] { "--sondear", "--clic" })
