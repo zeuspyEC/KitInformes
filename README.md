@@ -35,7 +35,15 @@ Capturador.exe --capturar pantalla     # una captura y termina
 Capturador.exe --capturar ventana
 Capturador.exe --salir                 # cierra la instancia abierta
 Capturador.exe --probar-atajos         # código de salida = atajos ocupados por otras aplicaciones
+Capturador.exe --sondear X Y           # pasa el cursor por (X,Y): ¿cambia algo? => elemento interactivo
+Capturador.exe --clic X Y [--esperar ms]  # clic en (X,Y) y verifica que la pantalla cambió
 ```
+
+`--sondear` y `--clic` siguen el ciclo **actuar y verificar**: captura «antes» con el cursor en reposo,
+actúa, captura «después» y compara los píxeles (cerca del punto, 200×200, y en toda la pantalla, para no
+confundir animaciones lejanas como relojes). Guardan `-antes.png`, `-despues.png` y `-marcado.png`
+(punto de acción en rojo y zona que cambió en azul) y una fila en `acciones.csv`.
+Código de salida: `0` hubo cambio, `1` no cambió nada, `3` argumentos inválidos.
 
 **Extensión:** en `config.ini`, `despues=` define un comando que se ejecuta tras cada captura
 (`{archivo}` se reemplaza por la ruta del PNG). Es el punto donde se conectará el análisis automático de
@@ -45,7 +53,7 @@ imágenes con IA.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File capturador\compilar.ps1   # -> dist\Capturador.exe
-powershell -ExecutionPolicy Bypass -File pruebas\probar.ps1        # 13 pruebas de punta a punta
+powershell -ExecutionPolicy Bypass -File pruebas\probar.ps1        # 14 pruebas de punta a punta
 ```
 
 Las pruebas usan una copia aislada en `%TEMP%` y toman el control del teclado y el mouse unos segundos
