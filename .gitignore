@@ -21,3 +21,6 @@ Thumbs.db
 
 # Copias temporales de las pruebas
 pruebas/tmp/
+
+# Archivos temporales de pruebas (carpeta con excepción del antivirus)
+temporal/
