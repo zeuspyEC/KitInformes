@@ -8,6 +8,8 @@ if (-not (Test-Path $csc)) { $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framewo
 $src = Join-Path $aqui 'Capturador.cs'
 $exe = Join-Path $dist 'Capturador.exe'
 $ico = Join-Path $dist 'capturador.ico'
+# Si el Capturador compilado está abierto, se cierra para poder reemplazar el .exe
+Get-Process Capturador -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe } | ForEach-Object { Start-Process $exe -ArgumentList '--salir' -Wait; if (-not $_.WaitForExit(5000)) { $_.Kill() } }
 $refs = '/r:System.dll', '/r:System.Drawing.dll', '/r:System.Windows.Forms.dll'
 # 1) compilación sin ícono para generar el .ico con el mismo dibujo del botón
 & $csc /nologo /target:winexe /optimize+ /codepage:65001 $refs "/out:$exe" $src
