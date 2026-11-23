@@ -377,6 +377,131 @@ namespace KitInformes
         }
     }
 
+    /// <summary>
+    /// Ciclo «actuar y verificar»: captura antes, mueve el cursor o hace clic, captura después y compara
+    /// los píxeles para confirmar que algo cambió y dónde. Deja las tres imágenes y una línea en acciones.csv.
+    /// </summary>
+    static class Accion
+    {
+        [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
+        [DllImport("user32.dll")] static extern void mouse_event(int f, int x, int y, int d, int e);
+
+        public class Resultado
+        {
+            public bool Cambio;
+            public double Porcentaje, Global;
+            public Rectangle Zona;
+            public string Antes, Despues, Marcado;
+        }
+
+        /// <summary>Compara dos capturas del mismo tamaño; devuelve el % de píxeles distintos y el rectángulo que los contiene.</summary>
+        public static double Comparar(Bitmap a, Bitmap b, Rectangle area, out Rectangle zona)
+        {
+            zona = Rectangle.Empty;
+            if (a.Width != b.Width || a.Height != b.Height) { zona = new Rectangle(0, 0, b.Width, b.Height); return 100; }
+            var r = new Rectangle(0, 0, a.Width, a.Height);
+            area = Rectangle.Intersect(area, r);
+            if (area.IsEmpty) return 0;
+            BitmapData da = a.LockBits(r, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            BitmapData db = b.LockBits(r, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            try
+            {
+                int bytes = da.Stride * a.Height;
+                byte[] pa = new byte[bytes], pb = new byte[bytes];
+                Marshal.Copy(da.Scan0, pa, 0, bytes);
+                Marshal.Copy(db.Scan0, pb, 0, bytes);
+                int minX = int.MaxValue, minY = int.MaxValue, maxX = -1, maxY = -1;
+                long distintos = 0;
+                for (int y = area.Top; y < area.Bottom; y++)
+                {
+                    int fila = y * da.Stride;
+                    for (int x = area.Left; x < area.Right; x++)
+                    {
+                        int i = fila + x * 4;
+                        int d = Math.Abs(pa[i] - pb[i]) + Math.Abs(pa[i + 1] - pb[i + 1]) + Math.Abs(pa[i + 2] - pb[i + 2]);
+                        if (d > 40)
+                        {
+                            distintos++;
+                            if (x < minX) minX = x; if (x > maxX) maxX = x;
+                            if (y < minY) minY = y; if (y > maxY) maxY = y;
+                        }
+                    }
+                }
+                if (maxX >= 0) zona = Rectangle.FromLTRB(minX, minY, maxX + 1, maxY + 1);
+                return 100.0 * distintos / ((long)area.Width * area.Height);
+            }
+            finally { a.UnlockBits(da); b.UnlockBits(db); }
+        }
+
+        /// <summary>modo = "sondear" (solo pasar el cursor) o "clic".</summary>
+        public static Resultado Ejecutar(string modo, int x, int y, int esperaMs, string carpeta)
+        {
+            Rectangle vs = SystemInformation.VirtualScreen;
+            // Cursor en reposo lejos del objetivo para la captura «antes» (el hover cambia la página).
+            // Esquina superior izquierda: la inferior derecha es «Mostrar escritorio» en Windows 10.
+            SetCursorPos(vs.Left + 1, vs.Top + 1);
+            Thread.Sleep(350);
+            var res = new Resultado();
+            using (Bitmap antes = Captura.Pantalla())
+            {
+                SetCursorPos(x, y);
+                if (modo == "clic") { Thread.Sleep(120); mouse_event(2, 0, 0, 0, 0); Thread.Sleep(60); mouse_event(4, 0, 0, 0, 0); }
+                Thread.Sleep(esperaMs);
+                using (Bitmap despues = Captura.Pantalla())
+                {
+                    Rectangle zona;
+                    // Cambio local (200×200 alrededor del objetivo) y global; las animaciones lejanas (relojes, temporizadores) no cuentan como local
+                    Rectangle zonaGlobal;
+                    res.Global = Comparar(antes, despues, new Rectangle(0, 0, antes.Width, antes.Height), out zonaGlobal);
+                    res.Porcentaje = Comparar(antes, despues, new Rectangle(x - vs.Left - 100, y - vs.Top - 100, 200, 200), out zona);
+                    if (modo == "clic" && res.Global > 5) zona = zonaGlobal; // la pantalla cambió casi entera (navegación, pantalla completa)
+                    res.Zona = zona;
+                    res.Cambio = res.Porcentaje >= 0.01 || (modo == "clic" && res.Global > 1); // 0,01 % de 200×200 = 4 píxeles
+
+                    Directory.CreateDirectory(carpeta);
+                    var reg = new Registro(carpeta);
+                    int n = reg.SiguienteNumero();
+                    string marca = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+                    res.Antes = Path.Combine(carpeta, string.Format("{0:000}_{1}_{2}-antes.png", n, marca, modo));
+                    res.Despues = Path.Combine(carpeta, string.Format("{0:000}_{1}_{2}-despues.png", n, marca, modo));
+                    res.Marcado = Path.Combine(carpeta, string.Format("{0:000}_{1}_{2}-marcado.png", n, marca, modo));
+                    antes.Save(res.Antes, ImageFormat.Png);
+                    despues.Save(res.Despues, ImageFormat.Png);
+                    using (var m = new Bitmap(despues))
+                    {
+                        using (var g = Graphics.FromImage(m))
+                        {
+                            g.SmoothingMode = SmoothingMode.AntiAlias;
+                            int px = x - vs.Left, py = y - vs.Top;
+                            using (var p = new Pen(Color.FromArgb(220, 38, 38), 3))
+                            {
+                                g.DrawEllipse(p, px - 14, py - 14, 28, 28);
+                                g.DrawLine(p, px - 22, py, px - 8, py); g.DrawLine(p, px + 8, py, px + 22, py);
+                                g.DrawLine(p, px, py - 22, px, py - 8); g.DrawLine(p, px, py + 8, px, py + 22);
+                            }
+                            if (!zona.IsEmpty)
+                                using (var p = new Pen(Color.FromArgb(56, 189, 248), 3) { DashStyle = DashStyle.Dash })
+                                    g.DrawRectangle(p, Rectangle.Inflate(zona, 3, 3));
+                        }
+                        m.Save(res.Marcado, ImageFormat.Png);
+                    }
+
+                    string csv = Path.Combine(carpeta, "acciones.csv");
+                    var sb = new StringBuilder();
+                    if (!File.Exists(csv)) sb.AppendLine("numero;fecha;hora;accion;x;y;cambio;porcentaje_local;porcentaje_global;zona_x;zona_y;zona_ancho;zona_alto;antes;despues;marcado");
+                    DateTime ahora = DateTime.Now;
+                    sb.AppendLine(string.Join(";", new[] {
+                        n.ToString("000"), ahora.ToString("yyyy-MM-dd"), ahora.ToString("HH:mm:ss"), modo, x.ToString(), y.ToString(),
+                        res.Cambio ? "si" : "no", res.Porcentaje.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture), res.Global.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture),
+                        (zona.X + vs.Left).ToString(), (zona.Y + vs.Top).ToString(), zona.Width.ToString(), zona.Height.ToString(),
+                        Path.GetFileName(res.Antes), Path.GetFileName(res.Despues), Path.GetFileName(res.Marcado) }));
+                    File.AppendAllText(csv, sb.ToString(), new UTF8Encoding(true));
+                }
+            }
+            return res;
+        }
+    }
+
     /// <summary>Aviso breve que no toma el foco; desaparece solo.</summary>
     class Aviso : Form
     {
@@ -826,6 +951,20 @@ namespace KitInformes
                     }
                 }
                 return ocupados;
+            }
+
+            // Actuar y verificar: Capturador.exe --sondear X Y | --clic X Y  [--esperar ms]
+            // Código de salida: 0 = hubo cambio en pantalla, 1 = no cambió nada, 3 = argumentos inválidos
+            foreach (string modoAccion in new[] { "--sondear", "--clic" })
+            {
+                i = lista.IndexOf(modoAccion);
+                if (i < 0) continue;
+                int ax, ay, espera = modoAccion == "--clic" ? 1200 : 600;
+                if (i + 2 >= lista.Count || !int.TryParse(lista[i + 1], out ax) || !int.TryParse(lista[i + 2], out ay)) return 3;
+                int j = lista.IndexOf("--esperar");
+                if (j >= 0 && j + 1 < lista.Count) int.TryParse(lista[j + 1], out espera);
+                var r = Accion.Ejecutar(modoAccion.Substring(2), ax, ay, espera, Config.Cargar(dirBase).Carpeta);
+                return r.Cambio ? 0 : 1;
             }
 
             i = lista.IndexOf("--capturar");
