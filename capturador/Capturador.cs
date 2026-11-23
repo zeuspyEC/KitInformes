@@ -1,7 +1,7 @@
-// Capturador — KitInformes
+// KitInformes — programa principal (capturador residente)
 // Botón flotante persistente + atajos globales para tomar capturas de pantalla
 // y registrar su información (fecha, modo, ventana, proceso) para armar informes.
-// Compila con el csc de .NET Framework 4.x incluido en Windows (C# 5): ver compilar.ps1.
+// Compila con el csc de .NET Framework 4.x incluido en Windows (C# 5): ver construir.ps1.
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -15,8 +15,8 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
 
-[assembly: System.Reflection.AssemblyTitle("Capturador - KitInformes")]
-[assembly: System.Reflection.AssemblyDescription("Capturas de pantalla con botón flotante y atajos de teclado")]
+[assembly: System.Reflection.AssemblyTitle("KitInformes")]
+[assembly: System.Reflection.AssemblyDescription("Capturas para informes con botón flotante, atajos, análisis de lo que se ve y clic verificado")]
 [assembly: System.Reflection.AssemblyProduct("KitInformes")]
 [assembly: System.Reflection.AssemblyCompany("Erick Costa")]
 [assembly: System.Reflection.AssemblyVersion("1.2.0.0")]
@@ -179,6 +179,56 @@ namespace KitInformes
     }
 
     /// <summary>Botón flotante, siempre encima, que no roba el foco a la ventana que se quiere capturar.</summary>
+    /// <summary>Ventana de configuración: solo las dos opciones principales (botón visible y modo de uso).</summary>
+    class Configuracion : Form
+    {
+        readonly CheckBox chkBoton;
+        readonly RadioButton rbCapturar, rbAnalizar;
+
+        public bool BotonVisible { get { return chkBoton.Checked; } }
+        public string Modo { get { return rbAnalizar.Checked ? "analizar" : "capturar"; } }
+
+        public Configuracion(bool botonVisible, string modo)
+        {
+            Text = "Configuración - KitInformes";
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false; MinimizeBox = false;
+            StartPosition = FormStartPosition.CenterScreen;
+            TopMost = true;
+            ShowInTaskbar = true;
+            Font = new Font("Segoe UI", 9.5f);
+            Icon = Dibujo.CrearIcono(32);
+            ClientSize = new Size(500, 372);
+            BackColor = Color.White;
+
+            var titulo = new Label { Text = "KitInformes", Font = new Font("Segoe UI Semibold", 14f), Location = new Point(20, 14), AutoSize = true };
+            var sub = new Label { Text = "Capturas para informes con contexto de lo que se ve en pantalla.", ForeColor = Color.FromArgb(90, 98, 112), Location = new Point(22, 46), AutoSize = true };
+
+            var g1 = new GroupBox { Text = "Botón flotante", Location = new Point(20, 78), Size = new Size(460, 92) };
+            chkBoton = new CheckBox { Text = "Mostrar el botón flotante en pantalla", Checked = botonVisible, Location = new Point(16, 26), AutoSize = true };
+            var nota1 = new Label { Text = "Si se oculta, los atajos siguen funcionando (Ctrl+Alt+S, V, R) y Ctrl+Alt+B\nlo vuelve a mostrar. El ícono de la bandeja abre esta configuración.",
+                ForeColor = Color.FromArgb(90, 98, 112), Location = new Point(34, 50), AutoSize = true, Font = new Font("Segoe UI", 8.5f) };
+            g1.Controls.AddRange(new Control[] { chkBoton, nota1 });
+
+            var g2 = new GroupBox { Text = "Modo de uso", Location = new Point(20, 182), Size = new Size(460, 132) };
+            rbCapturar = new RadioButton { Text = "Solo capturar", Checked = modo != "analizar", Location = new Point(16, 26), AutoSize = true };
+            var nota2 = new Label { Text = "Guarda la imagen y la anota en capturas.csv.", ForeColor = Color.FromArgb(90, 98, 112),
+                Location = new Point(34, 48), AutoSize = true, Font = new Font("Segoe UI", 8.5f) };
+            rbAnalizar = new RadioButton { Text = "Capturar y analizar", Checked = modo == "analizar", Location = new Point(16, 72), AutoSize = true };
+            var nota3 = new Label { Text = "Además describe lo que se ve (ventana, textos, botones y campos) en un\narchivo _analisis.md junto a la imagen y muestra un resumen como respuesta.",
+                ForeColor = Color.FromArgb(90, 98, 112), Location = new Point(34, 94), AutoSize = true, Font = new Font("Segoe UI", 8.5f) };
+            g2.Controls.AddRange(new Control[] { rbCapturar, nota2, rbAnalizar, nota3 });
+
+            // Ventana independiente (no modal): los botones fijan el resultado y la cierran
+            var guardar = new Button { Text = "Guardar", Location = new Point(296, 328), Size = new Size(88, 30) };
+            var cancelar = new Button { Text = "Cancelar", Location = new Point(392, 328), Size = new Size(88, 30) };
+            guardar.Click += (s, e) => { DialogResult = DialogResult.OK; Close(); };
+            cancelar.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
+            AcceptButton = guardar; CancelButton = cancelar;
+            Controls.AddRange(new Control[] { titulo, sub, g1, g2, guardar, cancelar });
+        }
+    }
+
     class BotonFlotante : Form
     {
         const int TAM = 52;
@@ -220,8 +270,8 @@ namespace KitInformes
             ayuda = new ToolTip();
             ayuda.SetToolTip(this, "Clic: pantalla completa · Clic derecho: más opciones\nCtrl+Alt+S pantalla · Ctrl+Alt+V ventana · Ctrl+Alt+R región · Ctrl+Alt+B mostrar/ocultar");
 
-            bandeja = new NotifyIcon { Icon = Dibujo.CrearIcono(32), Text = "Capturador (Ctrl+Alt+S)", ContextMenuStrip = menu, Visible = true };
-            bandeja.MouseClick += (s, e) => { if (e.Button == MouseButtons.Left) Capturar("pantalla"); };
+            bandeja = new NotifyIcon { Icon = Dibujo.CrearIcono(32), Text = "KitInformes (Ctrl+Alt+S)", ContextMenuStrip = menu, Visible = true };
+            bandeja.MouseClick += (s, e) => { if (e.Button == MouseButtons.Left) AbrirConfiguracion(); };
             
             Icon = Dibujo.CrearIcono(32);
 
@@ -323,10 +373,12 @@ namespace KitInformes
 
         Aviso aviso;
         /// <summary>Aviso propio junto al botón: no roba el foco ni se acumula en el centro de notificaciones.</summary>
-        void Avisar(string titulo, string texto, bool problema)
+        void Avisar(string titulo, string texto, bool problema) { Avisar(titulo, texto, problema, problema ? 4500 : 1800); }
+
+        void Avisar(string titulo, string texto, bool problema, int ms)
         {
             if (aviso != null && !aviso.IsDisposed) aviso.Close();
-            aviso = new Aviso(titulo, texto, problema, Visible ? Bounds : Rectangle.Empty, problema ? 4500 : 1800);
+            aviso = new Aviso(titulo, texto, problema, Visible ? Bounds : Rectangle.Empty, ms);
             aviso.Click += (s, e) => AbrirCarpeta();
             aviso.Show();
         }
@@ -339,6 +391,10 @@ namespace KitInformes
             {
                 var info = InfoVentana.De(VentanaObjetivo());
                 if (aviso != null && !aviso.IsDisposed) aviso.Close();
+                // Pantalla limpia: se cierran ventanas emergentes («Guardar contraseña» → «Nunca», «No, gracias»…)
+                List<string> cerrados = cfg.Limpiar && modo != "region" ? Limpieza.Descartar(info.Handle, cfg.Descartar) : new List<string>();
+                // Si la ventana emergente era la activa, ya no existe: se captura y analiza la que quedó debajo
+                if (cerrados.Count > 0 && !Nativo.IsWindowVisible(info.Handle)) { Thread.Sleep(300); info = InfoVentana.De(VentanaObjetivo()); }
                 bool estabaVisible = Visible;
                 if (estabaVisible) { Hide(); Application.DoEvents(); Thread.Sleep(150); }
                 Bitmap bmp = null;
@@ -365,8 +421,18 @@ namespace KitInformes
                     if (cfg.Sonido) System.Media.SystemSounds.Asterisk.Play();
                     EjecutarDespues(ruta);
                     Destello();
-                    string detalle = info.Titulo.Length > 0 && modo != "region" ? "\n" + info.Titulo : "";
-                    Avisar("Captura guardada", Path.GetFileName(ruta) + detalle, false);
+                    string limpio = cerrados.Count > 0 ? "\nSe cerró: «" + string.Join("», «", cerrados.ToArray()) + "»" : "";
+                    if (cfg.Analizar && info.Handle != IntPtr.Zero)
+                    {
+                        // Modo «Capturar y analizar»: contexto de lo que se ve, guardado junto a la imagen
+                        var r = Analizador.Analizar(info.Handle, ruta);
+                        Avisar("Captura analizada · " + Path.GetFileName(ruta), r.Resumen + limpio, false, 7000);
+                    }
+                    else
+                    {
+                        string detalle = info.Titulo.Length > 0 && modo != "region" ? "\n" + info.Titulo : "";
+                        Avisar("Captura guardada", Path.GetFileName(ruta) + detalle + limpio, false);
+                    }
                 }
             }
             catch (Exception ex)
@@ -422,6 +488,9 @@ namespace KitInformes
         ContextMenuStrip CrearMenu()
         {
             var m = new ContextMenuStrip();
+            var conf = new ToolStripMenuItem("Configuración…", null, (s, e) => AbrirConfiguracion()) { Font = new Font(m.Font, FontStyle.Bold) };
+            m.Items.Add(conf);
+            m.Items.Add(new ToolStripSeparator());
             m.Items.Add("Capturar pantalla completa\tCtrl+Alt+S", null, (s, e) => Diferido("pantalla"));
             m.Items.Add("Capturar ventana activa\tCtrl+Alt+V", null, (s, e) => Diferido("ventana"));
             m.Items.Add("Capturar región…\tCtrl+Alt+R", null, (s, e) => Diferido("region"));
@@ -464,6 +533,29 @@ namespace KitInformes
                     registro.Carpeta = d.SelectedPath;
                     cfg.Guardar();
                 }
+        }
+
+        Configuracion ventanaConfig;
+        public void AbrirConfiguracion()
+        {
+            if (ventanaConfig != null && !ventanaConfig.IsDisposed) { ventanaConfig.Activate(); return; }
+            // Ventana independiente (no modal y sin dueño): así no depende del aviso de inicio ni del botón oculto
+            var v = new Configuracion(Visible, cfg.Modo);
+            v.FormClosed += (s, e) =>
+            {
+                if (v.DialogResult == DialogResult.OK)
+                {
+                    cfg.Modo = v.Modo;
+                    if (v.BotonVisible != Visible) AlternarBoton();
+                    cfg.Guardar();
+                    Avisar("Configuración guardada", (cfg.Analizar ? "Modo: capturar y analizar." : "Modo: solo capturar.") +
+                        (Visible ? "" : " Botón oculto (Ctrl+Alt+B lo muestra)."), false);
+                }
+                v.Dispose();
+            };
+            ventanaConfig = v;
+            v.Show();
+            v.Activate();
         }
 
         public void MostrarAviso()
@@ -531,6 +623,7 @@ namespace KitInformes
         const string MUTEX = @"Local\KitInformes.Capturador";
         const string EV_SALIR = @"Local\KitInformes.Capturador.Salir";
         const string EV_MOSTRAR = @"Local\KitInformes.Capturador.Mostrar";
+        const string EV_CONFIG = @"Local\KitInformes.Capturador.Configuracion";
 
         [STAThread]
         static int Main(string[] args)
@@ -543,6 +636,10 @@ namespace KitInformes
 
             int i = lista.IndexOf("--exportar-icono");
             if (i >= 0 && i + 1 < lista.Count) { Dibujo.ExportarIco(lista[i + 1]); return 0; }
+
+            // Comandos de terminal: analizar, limpiar, elementos, clic-nombre, explorar, guion, ayuda
+            if (lista.Count > 0 && Array.IndexOf(Comandos.Nombres, lista[0].TrimStart('-').ToLowerInvariant()) >= 0)
+                return Comandos.Ejecutar(lista, dirBase);
 
             // Captura única desde la línea de comandos: Capturador.exe --capturar pantalla|ventana
             // Diagnóstico: devuelve cuántos atajos Ctrl+Alt+S/V/R/B están ocupados por otra aplicación
@@ -593,7 +690,7 @@ namespace KitInformes
             {
                 if (!nuevo)
                 {
-                    string ev = lista.Contains("--salir") ? EV_SALIR : EV_MOSTRAR;
+                    string ev = lista.Contains("--salir") ? EV_SALIR : lista.Contains("--configuracion") ? EV_CONFIG : EV_MOSTRAR;
                     EventWaitHandle h;
                     if (EventWaitHandle.TryOpenExisting(ev, out h)) using (h) h.Set();
                     return 0;
@@ -602,18 +699,21 @@ namespace KitInformes
 
                 using (var salir = new EventWaitHandle(false, EventResetMode.AutoReset, EV_SALIR))
                 using (var mostrar = new EventWaitHandle(false, EventResetMode.AutoReset, EV_MOSTRAR))
+                using (var config = new EventWaitHandle(false, EventResetMode.AutoReset, EV_CONFIG))
                 {
                     var form = new BotonFlotante(Config.Cargar(dirBase));
+                    if (lista.Contains("--configuracion")) form.Shown += (s, e) => form.BeginInvoke((Action)(() => form.AbrirConfiguracion()));
                     var hilo = new Thread(() =>
                     {
-                        var hs = new WaitHandle[] { salir, mostrar };
+                        var hs = new WaitHandle[] { salir, mostrar, config };
                         while (true)
                         {
                             int n = WaitHandle.WaitAny(hs);
                             try
                             {
                                 if (n == 0) { form.BeginInvoke((Action)(() => form.Close())); return; }
-                                form.BeginInvoke((Action)(() => form.MostrarAviso()));
+                                if (n == 2) form.BeginInvoke((Action)(() => form.AbrirConfiguracion()));
+                                else form.BeginInvoke((Action)(() => form.MostrarAviso()));
                             }
                             catch (InvalidOperationException) { return; }
                         }

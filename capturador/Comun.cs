@@ -47,6 +47,15 @@ namespace KitInformes
         public bool Visible = true, Portapapeles = true, Sonido = false;
         /// <summary>Comando opcional que se ejecuta tras cada captura ({archivo} = ruta del PNG). Punto de extensión para el análisis con IA.</summary>
         public string Despues = "";
+        /// <summary>Modo de uso: «capturar» (solo imagen) o «analizar» (imagen + contexto de lo que se ve).</summary>
+        public string Modo = "capturar";
+        /// <summary>Antes de capturar, cerrar ventanas emergentes molestas (guardar contraseña, etc.).</summary>
+        public bool Limpiar = true;
+        /// <summary>Mostrar el movimiento del cursor y un anillo en cada clic (se ve en tiempo real lo que hace el programa).</summary>
+        public bool CursorVisible = true;
+        /// <summary>Botones que se pulsan para descartar esas ventanas emergentes (nombre exacto, separados por |).</summary>
+        public string Descartar = "Nunca|No, gracias|Ahora no|Más tarde|Descartar|Rechazar|Never|No thanks|Not now|Dismiss";
+        public bool Analizar { get { return Modo == "analizar"; } }
         readonly string ruta;
 
         Config(string ruta) { this.ruta = ruta; }
@@ -72,16 +81,23 @@ namespace KitInformes
                         case "portapapeles": c.Portapapeles = v != "0"; break;
                         case "sonido": c.Sonido = v == "1"; break;
                         case "despues": c.Despues = v; break;
+                        case "modo": c.Modo = v == "analizar" ? "analizar" : "capturar"; break;
+                        case "limpiar": c.Limpiar = v != "0"; break;
+                        case "cursor_visible": c.CursorVisible = v != "0"; break;
+                        case "descartar": if (v.Length > 0) c.Descartar = v; break;
                     }
                 }
             }
+            Accion.Visible = c.CursorVisible;
             return c;
         }
 
         public void Guardar()
         {
             var sb = new StringBuilder();
-            sb.AppendLine("; Configuración del Capturador (se guarda sola)");
+            sb.AppendLine("; Configuración de KitInformes (se guarda sola; también se cambia desde «Configuración…»)");
+            sb.AppendLine("; modo: capturar = solo la imagen · analizar = imagen + contexto de lo que se ve (ventana, textos, botones)");
+            sb.AppendLine("modo=" + Modo);
             sb.AppendLine("carpeta=" + Carpeta);
             sb.AppendLine("x=" + X);
             sb.AppendLine("y=" + Y);
@@ -90,6 +106,11 @@ namespace KitInformes
             sb.AppendLine("sonido=" + (Sonido ? 1 : 0));
             sb.AppendLine("; Comando a ejecutar después de cada captura; {archivo} se reemplaza por la ruta del PNG");
             sb.AppendLine("despues=" + Despues);
+            sb.AppendLine("; Antes de capturar se cierran ventanas emergentes pulsando estos botones (nombre exacto, separados por |)");
+            sb.AppendLine("limpiar=" + (Limpiar ? 1 : 0));
+            sb.AppendLine("descartar=" + Descartar);
+            sb.AppendLine("; 1 = el cursor se desliza hasta el destino y cada clic se marca con un anillo rojo (tiempo real)");
+            sb.AppendLine("cursor_visible=" + (CursorVisible ? 1 : 0));
             try { File.WriteAllText(ruta, sb.ToString(), new UTF8Encoding(true)); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         }
     }
@@ -283,11 +304,85 @@ namespace KitInformes
         }
     }
 
-    /// <summary>Pantalla congelada a pantalla completa para elegir una región con el mouse.</summary>
+    /// <summary>
+    /// Anillo rojo que marca dónde se hace clic, para ver en tiempo real lo que hace el programa.
+    /// No recibe clics (los deja pasar), no toma el foco y se quita antes de la captura de verificación.
+    /// </summary>
+    class Anillo : Form
+    {
+        const int TAM = 44;
+
+        public Anillo(int x, int y)
+        {
+            FormBorderStyle = FormBorderStyle.None;
+            ShowInTaskbar = false;
+            TopMost = true;
+            StartPosition = FormStartPosition.Manual;
+            Bounds = new Rectangle(x - TAM / 2, y - TAM / 2, TAM, TAM);
+            BackColor = Color.Magenta;
+            TransparencyKey = Color.Magenta;
+        }
+
+        protected override bool ShowWithoutActivation { get { return true; } }
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                var cp = base.CreateParams;
+                // TRANSPARENT + LAYERED: los clics atraviesan el anillo
+                cp.ExStyle |= Nativo.WS_EX_TOOLWINDOW | Nativo.WS_EX_TOPMOST | Nativo.WS_EX_NOACTIVATE | 0x20 | 0x80000;
+                return cp;
+            }
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.None; // bordes nítidos: con suavizado aparecería un halo del color clave
+            using (var p = new Pen(Color.FromArgb(220, 38, 38), 4)) e.Graphics.DrawEllipse(p, 4, 4, TAM - 9, TAM - 9);
+        }
+
+        /// <summary>Muestra el anillo «ms» milisegundos (con su propio bombeo de mensajes, sirve también en la terminal).</summary>
+        public static void Mostrar(int x, int y, int ms)
+        {
+            using (var a = new Anillo(x, y))
+            {
+                a.Show();
+                var reloj = Stopwatch.StartNew();
+                while (reloj.ElapsedMilliseconds < ms) { Application.DoEvents(); Thread.Sleep(15); }
+                a.Hide();
+                Application.DoEvents();
+            }
+        }
+    }
+
+    /// <summary>Ciclo «actuar y verificar»: captura antes, actúa (hover o clic), captura después y compara.</summary>
     static class Accion
     {
         [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
         [DllImport("user32.dll")] static extern void mouse_event(int f, int x, int y, int d, int e);
+
+        /// <summary>Si es verdadero, el cursor se desliza hasta el destino y el clic se marca con un anillo (se ve en tiempo real).</summary>
+        public static bool Visible = true;
+
+        /// <summary>Lleva el cursor al punto: deslizándolo con suavidad (visible) o de inmediato.</summary>
+        public static void MoverCursor(int x, int y)
+        {
+            Point o = Cursor.Position;
+            double dist = Math.Sqrt((double)(x - o.X) * (x - o.X) + (double)(y - o.Y) * (y - o.Y));
+            if (Visible && dist > 3)
+            {
+                int pasos = Math.Max(8, Math.Min(40, (int)(dist / 22)));
+                for (int i = 1; i <= pasos; i++)
+                {
+                    double t = (double)i / pasos;
+                    double s = t < 0.5 ? 2 * t * t : 1 - Math.Pow(-2 * t + 2, 2) / 2; // arranca y frena suave
+                    SetCursorPos(o.X + (int)Math.Round((x - o.X) * s), o.Y + (int)Math.Round((y - o.Y) * s));
+                    Thread.Sleep(9);
+                }
+            }
+            SetCursorPos(x, y);
+        }
 
         public class Resultado
         {
@@ -343,14 +438,20 @@ namespace KitInformes
             // Sondear: «antes» con el cursor en reposo lejos del objetivo, para que el hover sea la diferencia
             // (esquina superior izquierda: la inferior derecha es «Mostrar escritorio» en Windows 10).
             // Clic: «antes» con el cursor YA sobre el objetivo, para que el hover no se confunda con el efecto del clic.
-            if (modo == "clic") { SetCursorPos(x, y); Thread.Sleep(450); }
-            else { SetCursorPos(vs.Left + 1, vs.Top + 1); Thread.Sleep(350); }
+            if (modo == "clic") { MoverCursor(x, y); Thread.Sleep(450); }
+            else { MoverCursor(vs.Left + 1, vs.Top + 1); Thread.Sleep(350); }
             var res = new Resultado();
             using (Bitmap antes = Captura.Pantalla())
             {
-                SetCursorPos(x, y);
-                if (modo == "clic") { Thread.Sleep(60); mouse_event(2, 0, 0, 0, 0); Thread.Sleep(60); mouse_event(4, 0, 0, 0, 0); }
-                Thread.Sleep(esperaMs);
+                MoverCursor(x, y);
+                int espera = esperaMs;
+                if (modo == "clic")
+                {
+                    Thread.Sleep(60); mouse_event(2, 0, 0, 0, 0); Thread.Sleep(60); mouse_event(4, 0, 0, 0, 0);
+                    // El anillo se ve mientras la página reacciona y se quita antes de la captura «después»
+                    if (Visible) { Anillo.Mostrar(x, y, 350); espera = Math.Max(150, esperaMs - 350); }
+                }
+                Thread.Sleep(espera);
                 using (Bitmap despues = Captura.Pantalla())
                 {
                     Rectangle zona;
