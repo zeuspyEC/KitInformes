@@ -340,15 +340,16 @@ namespace KitInformes
         public static Resultado Ejecutar(string modo, int x, int y, int esperaMs, string carpeta)
         {
             Rectangle vs = SystemInformation.VirtualScreen;
-            // Cursor en reposo lejos del objetivo para la captura «antes» (el hover cambia la página).
-            // Esquina superior izquierda: la inferior derecha es «Mostrar escritorio» en Windows 10.
-            SetCursorPos(vs.Left + 1, vs.Top + 1);
-            Thread.Sleep(350);
+            // Sondear: «antes» con el cursor en reposo lejos del objetivo, para que el hover sea la diferencia
+            // (esquina superior izquierda: la inferior derecha es «Mostrar escritorio» en Windows 10).
+            // Clic: «antes» con el cursor YA sobre el objetivo, para que el hover no se confunda con el efecto del clic.
+            if (modo == "clic") { SetCursorPos(x, y); Thread.Sleep(450); }
+            else { SetCursorPos(vs.Left + 1, vs.Top + 1); Thread.Sleep(350); }
             var res = new Resultado();
             using (Bitmap antes = Captura.Pantalla())
             {
                 SetCursorPos(x, y);
-                if (modo == "clic") { Thread.Sleep(120); mouse_event(2, 0, 0, 0, 0); Thread.Sleep(60); mouse_event(4, 0, 0, 0, 0); }
+                if (modo == "clic") { Thread.Sleep(60); mouse_event(2, 0, 0, 0, 0); Thread.Sleep(60); mouse_event(4, 0, 0, 0, 0); }
                 Thread.Sleep(esperaMs);
                 using (Bitmap despues = Captura.Pantalla())
                 {
@@ -357,9 +358,13 @@ namespace KitInformes
                     Rectangle zonaGlobal;
                     res.Global = Comparar(antes, despues, new Rectangle(0, 0, antes.Width, antes.Height), out zonaGlobal);
                     res.Porcentaje = Comparar(antes, despues, new Rectangle(x - vs.Left - 100, y - vs.Top - 100, 200, 200), out zona);
-                    if (modo == "clic" && res.Global > 5) zona = zonaGlobal; // la pantalla cambió casi entera (navegación, pantalla completa)
+                    // El clic cuenta como efectivo si cambió el lugar donde se hizo (≥ 4 píxeles = 0,01 % de 200×200)
+                    // o si cambió casi toda la pantalla (navegación, pantalla completa). Un cambio mediano en otra zona
+                    // —p. ej., una ventana emergente del navegador— no prueba que el clic haya funcionado.
+                    bool pantallaNueva = modo == "clic" && res.Global >= 20;
+                    if (pantallaNueva) zona = zonaGlobal;
                     res.Zona = zona;
-                    res.Cambio = res.Porcentaje >= 0.01 || (modo == "clic" && res.Global > 1); // 0,01 % de 200×200 = 4 píxeles
+                    res.Cambio = res.Porcentaje >= 0.01 || pantallaNueva;
 
                     Directory.CreateDirectory(carpeta);
                     var reg = new Registro(carpeta);
