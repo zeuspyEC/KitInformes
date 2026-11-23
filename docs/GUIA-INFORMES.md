@@ -143,6 +143,11 @@ Marco correcto (el usuario lo exige así):
 - Objetivo a futuro: que el Capturador **analice cada imagen** al capturarla (qué se ve, qué ventana, qué
   botones) para ayudar a **redactar** el informe automáticamente. Punto de extensión ya listo: en `config.ini`,
   `despues=comando {archivo}` se ejecuta tras cada captura.
+- Ciclo **actuar y verificar** ya implementado: `Capturador.exe --sondear X Y` (hover: confirma que hay un
+  elemento interactivo) y `--clic X Y` (confirma que la pantalla cambió). Comparan píxeles cerca del punto y en
+  toda la pantalla, y dejan antes/después/marcado + `acciones.csv`. Lecciones: el cursor en reposo va en la
+  esquina superior izquierda (la inferior derecha es «Mostrar escritorio»); los efectos de hover pueden ser de
+  pocos píxeles (una sombra), por eso el umbral local es de 4 píxeles; relojes y temporizadores no cuentan.
 - El análisis de imágenes con IA se haría con una **API** (p. ej., la API de Claude, que recibe la imagen y
   devuelve texto). Requiere una clave de API (de pago, por uso) guardada fuera del repositorio.
 - Límite: la herramienta es para **documentar trabajo propio** (informes, evidencias), no para responder
