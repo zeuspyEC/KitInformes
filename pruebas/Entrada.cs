@@ -1,9 +1,11 @@
 // Simulador de teclado y mouse para las pruebas automáticas del Capturador.
-// Uso: Entrada.exe teclas ctrl alt s | clic X Y | arrastrar X1 Y1 X2 Y2 | frente PID | mover PID X Y ANCHO ALTO | marco PID
+// Uso: Entrada.exe teclas ctrl alt s | clic X Y | arrastrar X1 Y1 X2 Y2 | frente PID | mover PID X Y ANCHO ALTO | marco PID | objetivo
 using System;
 using System.Diagnostics;
+using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Windows.Forms;
 
 static class Entrada
 {
@@ -67,6 +69,18 @@ static class Entrada
             }
             case "mover":
                 return MoveWindow(Ventana(a[1]), int.Parse(a[2]), int.Parse(a[3]), int.Parse(a[4]), int.Parse(a[5]), true) ? 0 : 1;
+            case "objetivo":
+            {
+                // Ventana de prueba en (300,300) de 300×200: botón en (350,350)-(470,390) que cambia con el hover y,
+                // al hacer clic, pinta toda la ventana de verde. La zona (520..590, 440..490) no reacciona a nada.
+                var f = new Form { FormBorderStyle = FormBorderStyle.None, StartPosition = FormStartPosition.Manual, Location = new Point(300, 300), Size = new Size(300, 200), BackColor = Color.White, TopMost = true, Text = "Objetivo de prueba", ShowInTaskbar = false };
+                var b = new Button { Text = "Probar", Location = new Point(50, 50), Size = new Size(120, 40), FlatStyle = FlatStyle.Flat, BackColor = Color.LightGray };
+                b.FlatAppearance.MouseOverBackColor = Color.SteelBlue;
+                b.Click += (s, e) => { f.BackColor = Color.ForestGreen; };
+                f.Controls.Add(b);
+                Application.Run(f);
+                return 0;
+            }
             case "marco":
             {
                 RECT r;

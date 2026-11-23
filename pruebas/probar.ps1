@@ -12,7 +12,7 @@ $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 $tmp = Join-Path $env:TEMP ('capturador-pruebas-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory $tmp | Out-Null
 $entrada = Join-Path $tmp 'Entrada.exe'
-& $csc /nologo /optimize+ /codepage:65001 "/out:$entrada" (Join-Path $aqui 'Entrada.cs') | Out-Host
+& $csc /nologo /optimize+ /codepage:65001 /r:System.Drawing.dll /r:System.Windows.Forms.dll "/out:$entrada" (Join-Path $aqui 'Entrada.cs') | Out-Host
 Copy-Item (Join-Path $raiz 'dist\Capturador.exe') $tmp
 $exe = Join-Path $tmp 'Capturador.exe'
 $capturas = Join-Path $tmp 'Capturas'
@@ -144,6 +144,22 @@ Probar '13. Comando «despues» se ejecuta tras cada captura' {
   $hook = Join-Path $capturas 'hook.txt'
   Afirmar (Test-Path $hook) 'no se ejecutó el comando'
   Afirmar ((Get-Content $hook -Raw) -match '006_.*_pantalla\.png') "contenido: $(Get-Content $hook -Raw)"
+}
+
+Probar '14. Sondeo por hover: detecta el botón y descarta una zona inerte; el clic se verifica' {
+  $obj = Start-Process $entrada -ArgumentList 'objetivo' -PassThru; Start-Sleep -Seconds 1
+  try {
+    $p = Start-Process $exe -ArgumentList '--sondear', '410', '370' -Wait -PassThru
+    Afirmar ($p.ExitCode -eq 0) "el botón no se detectó (salida $($p.ExitCode))"
+    $p = Start-Process $exe -ArgumentList '--sondear', '555', '465' -Wait -PassThru
+    Afirmar ($p.ExitCode -eq 1) "la zona inerte se tomó como interactiva (salida $($p.ExitCode))"
+    $p = Start-Process $exe -ArgumentList '--clic', '410', '370', '--esperar', '600' -Wait -PassThru
+    Afirmar ($p.ExitCode -eq 0) "el clic no produjo cambio (salida $($p.ExitCode))"
+    $a = @(Import-Csv (Join-Path $capturas 'acciones.csv') -Delimiter ';' -Encoding UTF8)
+    Afirmar ($a.Count -eq 3) "acciones.csv tiene $($a.Count) filas"
+    Afirmar ([int]$a[2].zona_ancho -ge 250) "la zona del clic no abarca la ventana: $($a[2].zona_ancho)"
+    Afirmar (@(Get-ChildItem $capturas -Filter '*-marcado.png').Count -eq 3) 'faltan imágenes marcadas'
+  } finally { if (-not $obj.HasExited) { $obj.Kill() } }
 }
 
 if (-not $bloc.HasExited) { $bloc.Kill() }
