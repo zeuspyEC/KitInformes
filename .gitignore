@@ -18,3 +18,6 @@ herramientas/informes/salida/
 evidencias/
 entregables/
 Thumbs.db
+
+# Copias temporales de las pruebas
+pruebas/tmp/

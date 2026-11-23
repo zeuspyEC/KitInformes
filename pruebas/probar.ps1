@@ -2,15 +2,16 @@
 # Toma el control del teclado y el mouse unos segundos: no tocar el equipo mientras corre.
 $ErrorActionPreference = 'Stop'
 # Cierra instancias de pruebas anteriores que hayan quedado abiertas
-Get-Process Capturador -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$env:TEMP*" } | Stop-Process -Force
+Get-Process Capturador -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '*\pruebas\tmp\*' } | Stop-Process -Force
 Add-Type -AssemblyName System.Drawing, System.Windows.Forms
 $aqui = Split-Path -Parent $MyInvocation.MyCommand.Path
 $raiz = Split-Path -Parent $aqui
 
 & (Join-Path $raiz 'capturador\compilar.ps1') | Out-Host
 $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-$tmp = Join-Path $env:TEMP ('capturador-pruebas-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
-New-Item -ItemType Directory $tmp | Out-Null
+# Copia aislada dentro del proyecto (pruebas\tmp, ignorada por git): una sola excepción del antivirus cubre todo
+$tmp = Join-Path $aqui ('tmp\' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+New-Item -ItemType Directory -Force $tmp | Out-Null
 $entrada = Join-Path $tmp 'Entrada.exe'
 & $csc /nologo /optimize+ /codepage:65001 /r:System.Drawing.dll /r:System.Windows.Forms.dll "/out:$entrada" (Join-Path $aqui 'Entrada.cs') | Out-Host
 Copy-Item (Join-Path $raiz 'dist\Capturador.exe') $tmp
