@@ -15,8 +15,8 @@ tecla CTRL+A
 escribir-oculto 12345678
 clic-nombre Entrar | botón
 verificar-titulo Inicio - PoliMusic V3
-# Chrome puede ofrecer guardar la contraseña: si aparece, se rechaza para que no tape la página
-clic-si-existe Nunca | botón
+# Chrome ofrece guardar la contraseña: no hace falta una línea para eso, KitInformes cierra solo las ventanas
+# emergentes («Nunca», «No, gracias»…) antes de cada acción, para que no tapen el clic ni salgan en las capturas
 clic-nombre Canciones | enlace
 verificar-titulo Canciones - PoliMusic V3
 elementos

@@ -69,11 +69,24 @@ static class Entrada
             }
             case "mover":
                 return MoveWindow(Ventana(a[1]), int.Parse(a[2]), int.Parse(a[3]), int.Parse(a[4]), int.Parse(a[5]), true) ? 0 : 1;
+            case "dialogo":
+            {
+                // Ventana emergente de prueba, como «¿Guardar la contraseña?» de un navegador: «No, gracias» la cierra
+                var f = new Form { Text = "Diálogo de prueba", StartPosition = FormStartPosition.Manual, Location = new Point(700, 280),
+                    Size = new Size(340, 170), TopMost = true, FormBorderStyle = FormBorderStyle.FixedToolWindow, BackColor = Color.White };
+                f.Controls.Add(new Label { Text = "¿Guardar la contraseña?", Location = new Point(20, 20), AutoSize = true, Font = new Font("Segoe UI", 11f) });
+                f.Controls.Add(new Button { Text = "Guardar", Location = new Point(20, 70), Size = new Size(120, 34) });
+                var no = new Button { Text = "No, gracias", Location = new Point(170, 70), Size = new Size(120, 34) };
+                no.Click += (s, e) => f.Close();
+                f.Controls.Add(no);
+                Application.Run(f);
+                return 0;
+            }
             case "objetivo":
             {
                 // Ventana de prueba en (300,300) de 300×200: botón en (350,350)-(470,390) que cambia con el hover y,
                 // al hacer clic, pinta toda la ventana de verde. La zona (520..590, 440..490) no reacciona a nada.
-                var f = new Form { FormBorderStyle = FormBorderStyle.None, StartPosition = FormStartPosition.Manual, Location = new Point(300, 300), Size = new Size(300, 200), BackColor = Color.White, TopMost = true, Text = "Objetivo de prueba", ShowInTaskbar = false };
+                var f = new Form { FormBorderStyle = FormBorderStyle.None, StartPosition = FormStartPosition.Manual, Location = new Point(300, 300), Size = new Size(300, 200), BackColor = Color.White, TopMost = true, Text = "Objetivo de prueba" };
                 var b = new Button { Text = "Probar", Location = new Point(50, 50), Size = new Size(120, 40), FlatStyle = FlatStyle.Flat, BackColor = Color.LightGray };
                 b.FlatAppearance.MouseOverBackColor = Color.SteelBlue;
                 b.Click += (s, e) => { f.BackColor = Color.ForestGreen; };
