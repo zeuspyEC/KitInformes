@@ -1,0 +1,20 @@
+# Compilación (el .exe se publica en Releases)
+dist/
+bin/
+obj/
+# Datos locales del Capturador
+Capturas/
+config.ini
+capturas.csv
+# Node
+node_modules/
+herramientas/informes/salida/
+# Secretos y entregables
+.env
+*.pem
+*.key
+*.zip
+*.pdf
+evidencias/
+entregables/
+Thumbs.db
